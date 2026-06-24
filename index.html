@@ -239,11 +239,13 @@ async function captureAndScan() {
   }
 
   // ビデオフレームをキャンバスに描画
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  const scale = 2;
+  canvas.width = video.videoWidth * scale;
+  canvas.height = video.videoHeight * scale;
   const ctx = canvas.getContext('2d');
+  ctx.scale(scale, scale);
   ctx.drawImage(video, 0, 0);
-  const imageData = canvas.toDataURL('image/jpeg', 0.85);
+  const imageData = canvas.toDataURL('image/jpeg', 0.95);
 
   // BarcodeDetectorが使える場合はまずブラウザで試行
   if (detector) {
