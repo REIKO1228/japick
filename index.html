@@ -270,24 +270,12 @@ async function captureAndScan() {
   setStatus('Geminiで読み取り中...', false);
 
   try {
-    const GEMINI_KEY = 'ここにAPIキーを貼る';
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [
-            { inline_data: { mime_type: 'image/jpeg', data: imageData.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, '') } },
-            { text: 'この画像のバーコードの数字のみ返してください。なければNOT_FOUNDと返してください。' }
-          ]}],
-          generationConfig: { temperature: 0, maxOutputTokens: 32 }
-        })
-      }
-    );
-    const geminiData = await geminiRes.json();
-    const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    const data = { janCode: (!rawText || rawText === 'NOT_FOUND') ? null : rawText.replace(/\D/g, ''), message: 'バーコードが見つかりませんでした' };
+   const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: imageData })
+    });
+    const data = await res.json();
 
     if (indicator) indicator.style.display = 'none';
 
