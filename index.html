@@ -100,13 +100,23 @@ body { font-family: var(--font); background: var(--off-white); color: var(--blac
   </div>
   <div class="content">
     <div class="card" style="padding:0;overflow:hidden;">
-      <div class="cam-wrap">
+      <div class="cam-wrap" id="cam-wrap">
         <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas-hidden" style="display:none;"></canvas>
         <div class="cam-overlay">
-          <div class="cam-tip">バーコードを枠の中に合わせてください</div>
+          <div id="cam-status" class="cam-status">カメラを起動中...</div>
           <div class="cam-frame"><div class="scan-line"></div></div>
-          <div class="cam-status" id="cam-status">📷 カメラ起動中...</div>
+          <div style="pointer-events:all;display:flex;flex-direction:column;align-items:center;gap:8px;">
+            <button onclick="captureAndScan()" style="background:white;border:4px solid rgba(255,255,255,0.4);border-radius:50%;width:68px;height:68px;font-size:28px;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.3);">📷</button>
+            <div class="cam-tip">ボタンを押してスキャン</div>
+          </div>
         </div>
+      </div>
+    </div>
+    <div id="scanning-indicator" style="display:none;" class="card" style="text-align:center;">
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:8px;">
+        <div class="spinner"></div>
+        <div style="font-size:14px;color:var(--gray-4);">Geminiがバーコードを読み取り中...</div>
       </div>
     </div>
     <div class="divider"><span>またはJANコードを手動入力</span></div>
@@ -159,7 +169,15 @@ let scanInterval = null;
 let detector = null;
 
 function saveKey() { goScan(); }
-function showSetup() { goScan(); }
+function showSetup() { go('s-setup'); }
+function saveGeminiKey() {
+  const k = document.getElementById('gemini-key-input').value.trim();
+  if (k) {
+    geminiKey = k;
+    localStorage.setItem(GEMINI_KEY, k);
+  }
+  goScan();
+}
 
 function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -209,6 +227,71 @@ async function scanFrame() {
       }
     }
   } catch(e) {}
+}
+
+async function captureAndScan() {
+  if (scanning) return;
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas-hidden');
+  if (!video.videoWidth) {
+    alert('カメラが起動していません。カメラのアクセスを許可してください。');
+    return;
+  }
+
+  // ビデオフレームをキャンバスに描画
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  const imageData = canvas.toDataURL('image/jpeg', 0.85);
+
+  // BarcodeDetectorが使える場合はまずブラウザで試行
+  if (detector) {
+    try {
+      const imageBitmap = await createImageBitmap(canvas);
+      const barcodes = await detector.detect(imageBitmap);
+      if (barcodes && barcodes.length > 0) {
+        const code = barcodes[0].rawValue;
+        if (code && code.length >= 8) {
+          scanning = true;
+          stopScan();
+          setStatus('✓ ' + code, true);
+          setTimeout(() => searchByJan(code), 300);
+          return;
+        }
+      }
+    } catch(e) {}
+  }
+
+  // Gemini Vision APIへ送信
+  scanning = true;
+  const indicator = document.getElementById('scanning-indicator');
+  if (indicator) indicator.style.display = 'block';
+  setStatus('Geminiで読み取り中...', false);
+
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: imageData })
+    });
+    const data = await res.json();
+
+    if (indicator) indicator.style.display = 'none';
+
+    if (data.janCode) {
+      stopScan();
+      setStatus('✓ ' + data.janCode, true);
+      setTimeout(() => searchByJan(data.janCode), 300);
+    } else {
+      scanning = false;
+      setStatus(data.message || 'バーコードが見つかりませんでした。もう一度試してください。', false);
+    }
+  } catch(e) {
+    if (indicator) indicator.style.display = 'none';
+    scanning = false;
+    setStatus('エラーが発生しました。再試行してください。', false);
+  }
 }
 
 function stopScan() {
