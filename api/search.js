@@ -21,8 +21,8 @@ export default async function handler(req, res) {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'Referer': 'https://japick-vercel-3.vercel.app/',
-        'Origin': 'https://japick-vercel-3.vercel.app',
+        'Referer': 'https://japick.vercel.app/',
+        'Origin': 'https://japick.vercel.app',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0',
         'Accept': 'application/json',
         'Accept-Language': 'ja,en;q=0.9',
