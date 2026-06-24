@@ -15,7 +15,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const searchParam = jan ? `jan=${jan}` : `keyword=${encodeURIComponent(keyword || '')}`;
+    const searchParam = jan 
+      ? `keyword=${jan}` 
+      : `keyword=${encodeURIComponent(keyword || '')}`;
     const url = `https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401?format=json&applicationId=${appid}&accessKey=${secret}&${searchParam}&hits=3`;
     
     const response = await fetch(url, {
