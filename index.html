@@ -74,14 +74,11 @@ body { font-family: var(--font); background: var(--off-white); color: var(--blac
 .cam-wrap { width: 100%; aspect-ratio: 1; background: #0a0a0a; border-radius: var(--r-xl); overflow: hidden; position: relative; }
 #video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cam-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 20px; pointer-events: none; }
-.cam-frame { width: 220px; height: 110px; border: 2px solid rgba(255,255,255,0.4); border-radius: 10px; position: relative; flex-shrink: 0; }
-.cam-frame::before { content: ''; position: absolute; top: -2px; left: -2px; width: 24px; height: 24px; border-top: 3px solid #2D6A4F; border-left: 3px solid #2D6A4F; border-radius: 4px 0 0 0; }
-.cam-frame::after { content: ''; position: absolute; bottom: -2px; right: -2px; width: 24px; height: 24px; border-bottom: 3px solid #2D6A4F; border-right: 3px solid #2D6A4F; border-radius: 0 0 4px 0; }
-.scan-line { position: absolute; left: 4px; right: 4px; height: 2px; background: linear-gradient(90deg, transparent, #2D6A4F, transparent); animation: scanline 1.8s ease-in-out infinite; }
-@keyframes scanline { 0%,100% { top: 8px; } 50% { top: calc(100% - 8px); } }
-.cam-tip { font-size: 12px; color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.55); padding: 6px 16px; border-radius: 100px; }
 .cam-status { font-size: 12px; color: white; background: rgba(0,0,0,0.55); padding: 6px 16px; border-radius: 100px; }
 .cam-status.found { background: rgba(45,106,79,0.85); }
+.scan-pulse { width: 60px; height: 60px; border-radius: 50%; border: 3px solid rgba(45,106,79,0.8); animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.5; } }
+.scan-hint { font-size: 12px; color: rgba(255,255,255,0.85); background: rgba(0,0,0,0.55); padding: 6px 16px; border-radius: 100px; }
 </style>
 </head>
 <body>
@@ -105,15 +102,12 @@ body { font-family: var(--font); background: var(--off-white); color: var(--blac
         <canvas id="canvas-hidden" style="display:none;"></canvas>
         <div class="cam-overlay">
           <div id="cam-status" class="cam-status">カメラを起動中...</div>
-          <div class="cam-frame"><div class="scan-line"></div></div>
-          <div style="pointer-events:all;display:flex;flex-direction:column;align-items:center;gap:8px;">
-            <button onclick="captureAndScan()" style="background:white;border:4px solid rgba(255,255,255,0.4);border-radius:50%;width:68px;height:68px;font-size:28px;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.3);">📷</button>
-            <div class="cam-tip">ボタンを押してスキャン</div>
-          </div>
+          <div class="scan-pulse" id="scan-pulse"></div>
+          <div class="scan-hint">バーコードをカメラに向けてください</div>
         </div>
       </div>
     </div>
-    <div id="scanning-indicator" style="display:none;" class="card" style="text-align:center;">
+    <div id="scanning-indicator" style="display:none;" class="card">
       <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:8px;">
         <div class="spinner"></div>
         <div style="font-size:14px;color:var(--gray-4);">Geminiがバーコードを読み取り中...</div>
@@ -162,29 +156,23 @@ body { font-family: var(--font); background: var(--off-white); color: var(--blac
 </div>
 
 <script>
-// APIキーはサーバー側のEnvironment Variablesで管理
 let videoStream = null;
 let scanning = false;
 let scanInterval = null;
 let detector = null;
+let geminiCooldown = false;
 
 function saveKey() { goScan(); }
 function showSetup() { go('s-setup'); }
-function saveGeminiKey() {
-  const k = document.getElementById('gemini-key-input').value.trim();
-  if (k) {
-    geminiKey = k;
-    localStorage.setItem(GEMINI_KEY, k);
-  }
-  goScan();
-}
 
 function go(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
+
 function goScan() {
   scanning = false;
+  geminiCooldown = false;
   go('s-scan');
   startCamera();
 }
@@ -192,25 +180,30 @@ function goScan() {
 async function startCamera() {
   stopScan();
   scanning = false;
+  geminiCooldown = false;
   const video = document.getElementById('video');
   try {
     videoStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
     video.srcObject = videoStream;
     await video.play();
+
     if ('BarcodeDetector' in window) {
       detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'code_128', 'upc_a'] });
-      setStatus('スキャン中... バーコードを枠に合わせてください', false);
+      setStatus('バーコードを向けてください', false);
       scanInterval = setInterval(scanFrame, 400);
     } else {
-      setStatus('手動入力でJANコードを入力してください', false);
+      // BarcodeDetector非対応（iOS等）→ Gemini自動スキャン
+      setStatus('バーコードを向けてください', false);
+      scanInterval = setInterval(autoGeminiScan, 2500);
     }
   } catch(e) {
     setStatus('カメラのアクセスを許可してください', false);
   }
 }
 
+// BarcodeDetector対応ブラウザ用（Android Chrome等）
 async function scanFrame() {
   if (scanning) return;
   const video = document.getElementById('video');
@@ -223,76 +216,46 @@ async function scanFrame() {
         scanning = true;
         stopScan();
         setStatus('✓ ' + code, true);
-        setTimeout(() => searchByJan(code), 500);
+        setTimeout(() => searchByJan(code), 300);
       }
     }
   } catch(e) {}
 }
 
-async function captureAndScan() {
-  if (scanning) return;
+// BarcodeDetector非対応ブラウザ用（iOS等）→ Gemini自動スキャン
+async function autoGeminiScan() {
+  if (scanning || geminiCooldown) return;
   const video = document.getElementById('video');
+  if (!video.videoWidth) return;
+
+  geminiCooldown = true;
+
   const canvas = document.getElementById('canvas-hidden');
-  if (!video.videoWidth) {
-    alert('カメラが起動していません。カメラのアクセスを許可してください。');
-    return;
-  }
-
-  // ビデオフレームをキャンバスに描画
-  const scale = 2;
-  canvas.width = video.videoWidth * scale;
-  canvas.height = video.videoHeight * scale;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
-  ctx.scale(scale, scale);
   ctx.drawImage(video, 0, 0);
-  const imageData = canvas.toDataURL('image/jpeg', 0.95);
-
-  // BarcodeDetectorが使える場合はまずブラウザで試行
-  if (detector) {
-    try {
-      const imageBitmap = await createImageBitmap(canvas);
-      const barcodes = await detector.detect(imageBitmap);
-      if (barcodes && barcodes.length > 0) {
-        const code = barcodes[0].rawValue;
-        if (code && code.length >= 8) {
-          scanning = true;
-          stopScan();
-          setStatus('✓ ' + code, true);
-          setTimeout(() => searchByJan(code), 300);
-          return;
-        }
-      }
-    } catch(e) {}
-  }
-
-  // Gemini Vision APIへ送信
-  scanning = true;
-  const indicator = document.getElementById('scanning-indicator');
-  if (indicator) indicator.style.display = 'block';
-  setStatus('Geminiで読み取り中...', false);
+  const imageData = canvas.toDataURL('image/jpeg', 0.92);
 
   try {
-   const res = await fetch('/api/scan', {
+    const res = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image: imageData })
     });
     const data = await res.json();
 
-    if (indicator) indicator.style.display = 'none';
-
-    if (data.janCode) {
+    if (data.janCode && data.janCode.length >= 8) {
+      scanning = true;
       stopScan();
       setStatus('✓ ' + data.janCode, true);
       setTimeout(() => searchByJan(data.janCode), 300);
     } else {
-      scanning = false;
-      setStatus(data.message || 'バーコードが見つかりませんでした。もう一度試してください。', false);
+      // 見つからなかったら2.5秒後に再試行
+      setTimeout(() => { geminiCooldown = false; }, 2500);
     }
   } catch(e) {
-    if (indicator) indicator.style.display = 'none';
-    scanning = false;
-    setStatus('エラーが発生しました。再試行してください。', false);
+    setTimeout(() => { geminiCooldown = false; }, 2500);
   }
 }
 
@@ -303,7 +266,9 @@ function stopScan() {
 
 function setStatus(msg, found) {
   const el = document.getElementById('cam-status');
+  const pulse = document.getElementById('scan-pulse');
   if (el) { el.textContent = msg; el.className = 'cam-status' + (found ? ' found' : ''); }
+  if (pulse) { pulse.style.display = found ? 'none' : 'block'; }
 }
 
 function searchByJanInput() {
@@ -418,8 +383,7 @@ function showError(jan, msg) {
       <div class="error-title">⚠️ エラーが発生しました</div>
       <div class="error-text">${msg}</div>
     </div>
-    <button class="btn btn-ghost" style="margin-top:14px;" onclick="goScan()">← 戻る</button>
-    <button class="btn btn-ghost" style="margin-top:8px;" onclick="showSetup()">⚙️ APIキーを確認する</button>`;
+    <button class="btn btn-ghost" style="margin-top:14px;" onclick="goScan()">← 戻る</button>`;
   go('s-result');
 }
 
