@@ -18,7 +18,9 @@ export default async function handler(req, res) {
     const searchParam = jan 
   ? `keyword=${jan}&sort=+itemPrice&genreId=0` 
   : `keyword=${encodeURIComponent(keyword || '')}`;
-    const url = `https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401?format=json&applicationId=${appid}&accessKey=${secret}&${searchParam}&hits=3`;
+    const url = jan
+  ? `https://app.rakuten.co.jp/services/api/BooksTotal/Search/20170404?format=json&applicationId=${appid}&isbn=${jan}&hits=3`
+  : `https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401?format=json&applicationId=${appid}&accessKey=${secret}&${searchParam}&hits=3`;
     
     const response = await fetch(url, {
       method: 'GET',
