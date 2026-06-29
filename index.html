@@ -337,13 +337,14 @@ const vnd = Math.round(sellPrice * exchangeRate).toLocaleString();
       <button class="btn btn-ghost" style="margin-top:10px;font-size:13px;padding:10px;" onclick="window.open('${item.itemUrl||''}','_blank')">🛍 楽天で商品を確認する →</button>
     </div>
     <div class="profit-box">
-      <div class="profit-label">利益シミュレーション — Singapore</div>
+      <div class="profit-label">利益シミュレーション — Vietnam</div>
       <div class="profit-main">+¥${profit.toLocaleString()}</div>
       <div class="profit-row"><span class="profit-row-label">仕入れ値</span><span class="profit-row-value">¥${Number(price).toLocaleString()}</span></div>
-      <div class="profit-row"><span class="profit-row-label">国際送料（目安）</span><span class="profit-row-value">¥${shipping}</span></div>
-      <div class="profit-row"><span class="profit-row-label">利益率</span><span class="profit-row-value">30%</span></div>
+      <div class="profit-row"><span class="profit-row-label">国内送料</span><span class="profit-row-value">¥${domesticShipping}</span></div>
+      <div class="profit-row"><span class="profit-row-label">Shopee手数料</span><span class="profit-row-value">21%</span></div>
+      <div class="profit-row"><span class="profit-row-label">Payoneer手数料</span><span class="profit-row-value">2%</span></div>
       <div class="profit-row" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:8px;margin-top:4px;">
-        <span class="profit-row-label">推奨販売価格</span><span class="profit-row-value">S$${sgd}</span>
+        <span class="profit-row-label">推奨販売価格</span><span class="profit-row-value">₫${vnd}</span>
       </div>
     </div>
     <button class="btn btn-accent" onclick="alert('出品機能は次のバージョンで追加します！')">📤 Shopeeに出品する</button>
